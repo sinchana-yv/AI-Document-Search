@@ -3,7 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import DocumentUpload from '@/components/DocumentUpload';
 import ChatInterface from '@/components/ChatInterface';
-import { FileText, Database, ExternalLink, Cpu, Trash2, Loader2 } from 'lucide-react';
+import AuthPage from '@/components/AuthPage';
+import Dashboard from '@/components/Dashboard';
+import { FileText, Database, ExternalLink, Cpu, Trash2, Loader2, LogOut, LayoutDashboard } from 'lucide-react';
 
 interface DocumentItem {
   filename: string;
@@ -12,6 +14,8 @@ interface DocumentItem {
 export default function Home() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [deletingFile, setDeletingFile] = useState<string | null>(null);
+  const [user, setUser] = useState<{ name: string; email: string; phone: string } | null>(null);
+  const [activeView, setActiveView] = useState<'dashboard' | 'chat'>('dashboard');
 
   const fetchDocuments = async () => {
     try {
@@ -43,8 +47,18 @@ export default function Home() {
   };
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedUser = window.localStorage.getItem('rag-current-user');
+      if (savedUser) {
+        window.localStorage.removeItem('rag-current-user');
+      }
+    }
     fetchDocuments();
   }, []);
+
+  if (!user) {
+    return <AuthPage onLogin={setUser} />;
+  }
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 selection:bg-blue-500 selection:text-white">
@@ -57,88 +71,106 @@ export default function Home() {
             </div>
             <div>
               <h1 className="font-bold text-base bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-                RAG Document Search & AI Chatbot
+                AI-Document Search
               </h1>
-              <p className="text-[11px] text-slate-400">FastAPI • Pinecone / Vector DB • OpenAI GPT-4o</p>
+              <p className="text-[11px] text-slate-400">FastAPI • Local Document Intelligence</p>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-950/80 border border-emerald-800/80 text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              API Online
-            </span>
-            <a
-              href="http://localhost:8000/docs"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-medium text-slate-400 hover:text-slate-200 flex items-center gap-1 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 transition"
-            >
-              <span>Swagger API Docs</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setActiveView('dashboard')}
+                className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${activeView === 'dashboard' ? 'border-blue-500 bg-blue-600/20 text-blue-300' : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+              >
+                <LayoutDashboard className="h-3.5 w-3.5" />
+                Dashboard
+              </button>
+              <button
+                onClick={() => setActiveView('chat')}
+                className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${activeView === 'chat' ? 'border-emerald-500 bg-emerald-600/20 text-emerald-300' : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+              >
+                <Cpu className="h-3.5 w-3.5" />
+                Chat
+              </button>
+              <button
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.localStorage.removeItem('rag-current-user');
+                  }
+                  setUser(null);
+                }}
+                className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-700"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Main Grid Layout */}
-      <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Sidebar: Document Management */}
-        <div className="lg:col-span-4 space-y-6">
-          {/* Upload Component */}
-          <DocumentUpload onDocumentUploaded={fetchDocuments} />
+      {activeView === 'dashboard' ? (
+        <Dashboard user={user} documents={documents} onOpenChat={() => setActiveView('chat')} />
+      ) : (
+        <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Sidebar: Document Management */}
+          <div className="lg:col-span-4 space-y-6">
+            {/* Upload Component */}
+            <DocumentUpload onDocumentUploaded={fetchDocuments} />
 
-          {/* Uploaded Documents List Card */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-lg backdrop-blur-md">
-            <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
-              <Database className="w-4 h-4 text-emerald-400" />
-              Indexed Documents ({documents.length})
-            </h3>
+            {/* Uploaded Documents List Card */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-lg backdrop-blur-md">
+              <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+                <Database className="w-4 h-4 text-emerald-400" />
+                Indexed Documents ({documents.length})
+              </h3>
 
-            {documents.length === 0 ? (
-              <div className="p-4 rounded-lg bg-slate-950/40 border border-slate-800/80 text-center">
-                <p className="text-xs text-slate-500">No documents uploaded yet.</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {documents.map((doc, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs group"
-                  >
-                    <div className="flex items-center gap-2 truncate flex-1 min-w-0">
-                      <FileText className="w-4 h-4 text-blue-400 shrink-0" />
-                      <span className="font-medium text-slate-300 truncate" title={doc.filename}>{doc.filename}</span>
+              {documents.length === 0 ? (
+                <div className="p-4 rounded-lg bg-slate-950/40 border border-slate-800/80 text-center">
+                  <p className="text-xs text-slate-500">No documents uploaded yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  {documents.map((doc, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs group"
+                    >
+                      <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+                        <FileText className="w-4 h-4 text-blue-400 shrink-0" />
+                        <span className="font-medium text-slate-300 truncate" title={doc.filename}>{doc.filename}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                        <span className="text-[10px] text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/50">
+                          Indexed
+                        </span>
+                        <button
+                          onClick={() => deleteDocument(doc.filename)}
+                          disabled={deletingFile === doc.filename}
+                          title="Delete document"
+                          className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-950/50 transition disabled:opacity-50"
+                        >
+                          {deletingFile === doc.filename ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                      <span className="text-[10px] text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/50">
-                        Indexed
-                      </span>
-                      <button
-                        onClick={() => deleteDocument(doc.filename)}
-                        disabled={deletingFile === doc.filename}
-                        title="Delete document"
-                        className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-950/50 transition disabled:opacity-50"
-                      >
-                        {deletingFile === doc.filename ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Panel: RAG Chatbot Interface */}
+          <div className="lg:col-span-8">
+            <ChatInterface />
           </div>
         </div>
-
-        {/* Right Panel: RAG Chatbot Interface */}
-        <div className="lg:col-span-8">
-          <ChatInterface />
-        </div>
-      </div>
+      )}
     </main>
   );
 }

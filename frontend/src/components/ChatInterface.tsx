@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, BookOpen, ChevronDown, ChevronUp, Sparkles, AlertCircle } from 'lucide-react';
+import { Send, Bot, User, BookOpen, ChevronDown, ChevronUp, Sparkles, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 
 export interface SourceCitation {
   text: string;
@@ -18,17 +18,46 @@ export interface ChatMessage {
 }
 
 export default function ChatInterface() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      sender: 'assistant',
-      content: 'Hello! Upload a document on the left sidebar and ask me any question about its contents.',
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (typeof window === 'undefined') {
+      return [
+        {
+          id: 'welcome',
+          sender: 'assistant',
+          content: 'Hello! Upload a document on the left sidebar and ask me any question about its contents.',
+        },
+      ];
+    }
+
+    try {
+      const saved = window.localStorage.getItem('rag-chat-history');
+      if (saved) {
+        const parsed = JSON.parse(saved) as ChatMessage[];
+        if (parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load chat history', e);
+    }
+
+    return [
+      {
+        id: 'welcome',
+        sender: 'assistant',
+        content: 'Hello! Upload a document on the left sidebar and ask me any question about its contents.',
+      },
+    ];
+  });
   const [inputQuery, setInputQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<'idle' | 'listening' | 'speaking' | 'thinking'>('idle');
   const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -38,6 +67,26 @@ export default function ChatInterface() {
     scrollToBottom();
   }, [messages, isLoading]);
 
+  useEffect(() => {
+    if (audioEnabled) {
+      const timer = window.setTimeout(() => {
+        speakText('Hello! I am your voice assistant. Ask me anything about your uploaded document.');
+      }, 400);
+      return () => window.clearTimeout(timer);
+    }
+  }, [audioEnabled]);
+
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      if (typeof window !== 'undefined') {
+        window.speechSynthesis?.cancel();
+      }
+    };
+  }, []);
+
   const toggleSources = (msgId: string) => {
     setExpandedSources((prev) => ({
       ...prev,
@@ -45,23 +94,99 @@ export default function ChatInterface() {
     }));
   };
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!inputQuery.trim() || isLoading) return;
+  const speakText = (text: string) => {
+    if (!audioEnabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
 
-    const userMessageText = inputQuery.trim();
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      setVoiceStatus('speaking');
+    };
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      setVoiceStatus('idle');
+    };
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      setVoiceStatus('idle');
+    };
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const toggleListening = () => {
+    if (typeof window === 'undefined') return;
+
+    const SpeechRecognitionCtor = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+      setInputQuery('Speech recognition is not supported in this browser.');
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      setVoiceStatus('idle');
+      return;
+    }
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results)
+        .map((result: any) => result[0].transcript)
+        .join('');
+      setInputQuery(transcript);
+      setIsListening(false);
+      setVoiceStatus('thinking');
+      recognition.stop();
+      void submitMessage(transcript);
+    };
+
+    recognition.onerror = () => {
+      setIsListening(false);
+      setVoiceStatus('idle');
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      setVoiceStatus('idle');
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+    setVoiceStatus('listening');
+  };
+
+  const submitMessage = async (text: string) => {
+    if (!text.trim() || isLoading) return;
+
+    const userMessageText = text.trim();
     const userMsgId = Date.now().toString();
 
-    // Append User Message
     const userMessage: ChatMessage = {
       id: userMsgId,
       sender: 'user',
       content: userMessageText,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => {
+      const next = [...prev, userMessage];
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('rag-chat-history', JSON.stringify(next));
+      }
+      return next;
+    });
     setInputQuery('');
     setIsLoading(true);
+    setVoiceStatus('thinking');
 
     try {
       const response = await fetch('http://localhost:8000/api/v1/chat/query', {
@@ -88,17 +213,72 @@ export default function ChatInterface() {
         sources: data.sources,
       };
 
-      setMessages((prev) => [...prev, assistantMsg]);
+      setMessages((prev) => {
+        const next = [...prev, assistantMsg];
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('rag-chat-history', JSON.stringify(next));
+        }
+        return next;
+      });
+      if (audioEnabled) {
+        speakText(data.answer);
+      }
     } catch (err: any) {
       const errorMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'assistant',
         content: `Error: ${err.message || 'Failed to query the document assistant.'}`,
       };
-      setMessages((prev) => [...prev, errorMsg]);
+      setMessages((prev) => {
+        const next = [...prev, errorMsg];
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('rag-chat-history', JSON.stringify(next));
+        }
+        return next;
+      });
     } finally {
       setIsLoading(false);
+      setVoiceStatus('idle');
     }
+  };
+
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    await submitMessage(inputQuery);
+  };
+
+  const formatAssistantContent = (content: string) => {
+    const lines = content
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (lines.length === 0) {
+      return [];
+    }
+
+    const formatted: Array<{ type: 'paragraph' | 'list'; text?: string; items?: string[] }> = [];
+    let currentList: string[] = [];
+
+    const flushList = () => {
+      if (currentList.length > 0) {
+        formatted.push({ type: 'list', items: currentList });
+        currentList = [];
+      }
+    };
+
+    lines.forEach((line) => {
+      if (/^[-*•]\s+/.test(line)) {
+        currentList.push(line.replace(/^[-*•]\s+/, ''));
+        return;
+      }
+
+      flushList();
+      formatted.push({ type: 'paragraph', text: line });
+    });
+
+    flushList();
+    return formatted;
   };
 
   return (
@@ -113,6 +293,13 @@ export default function ChatInterface() {
             <h2 className="text-base font-semibold text-slate-100">AI Document Assistant</h2>
             <p className="text-xs text-slate-400">Retrieval-Augmented Generation (RAG) System</p>
           </div>
+        </div>
+        <div className={`px-3 py-1 rounded-full text-[11px] font-medium border ${
+          isListening ? 'bg-red-600/20 border-red-500/40 text-red-300' :
+          isSpeaking ? 'bg-emerald-600/20 border-emerald-500/40 text-emerald-300' :
+          'bg-slate-800 border-slate-700 text-slate-400'
+        }`}>
+          {isListening ? 'Listening…' : isSpeaking ? 'Speaking…' : voiceStatus === 'thinking' ? 'Thinking…' : audioEnabled ? 'Voice On' : 'Voice Off'}
         </div>
       </div>
 
@@ -145,7 +332,25 @@ export default function ChatInterface() {
                     : 'bg-slate-800/90 text-slate-200 border border-slate-700/60 rounded-tl-none shadow-md'
                 }`}
               >
-                {msg.content}
+                {msg.sender === 'assistant' ? (
+                  <div className="space-y-2">
+                    {formatAssistantContent(msg.content).map((segment, index) => (
+                      segment.type === 'list' ? (
+                        <ul key={`${msg.id}-list-${index}`} className="list-disc pl-5 space-y-1 text-sm">
+                          {segment.items?.map((item, itemIndex) => (
+                            <li key={`${msg.id}-item-${itemIndex}`}>{item}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p key={`${msg.id}-text-${index}`} className="whitespace-pre-wrap leading-relaxed">
+                          {segment.text}
+                        </p>
+                      )
+                    ))}
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                )}
               </div>
 
               {/* Source Citations Accordion */}
@@ -205,7 +410,7 @@ export default function ChatInterface() {
       </div>
 
       {/* Input Form */}
-      <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-800 bg-slate-950/80 flex gap-3">
+      <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-800 bg-slate-950/80 flex gap-2">
         <input
           type="text"
           value={inputQuery}
@@ -214,6 +419,33 @@ export default function ChatInterface() {
           className="flex-1 bg-slate-900 border border-slate-700/80 focus:border-blue-500 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500 transition placeholder-slate-500"
           disabled={isLoading}
         />
+        <button
+          type="button"
+          onClick={toggleListening}
+          className={`px-3 py-3 rounded-xl border transition ${isListening ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-blue-500 hover:text-blue-400'}`}
+          disabled={isLoading}
+          aria-label="Toggle voice input"
+        >
+          {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setAudioEnabled((prev) => {
+              const next = !prev;
+              if (!next) {
+                window.speechSynthesis?.cancel();
+                setIsSpeaking(false);
+                setVoiceStatus('idle');
+              }
+              return next;
+            });
+          }}
+          className={`px-3 py-3 rounded-xl border transition ${audioEnabled ? 'bg-emerald-600/20 border-emerald-500/40 text-emerald-400' : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-blue-500 hover:text-blue-400'}`}
+          aria-label="Toggle audio output"
+        >
+          {audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+        </button>
         <button
           type="submit"
           disabled={isLoading || !inputQuery.trim()}

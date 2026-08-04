@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'RAG AI Document Search Chatbot',
-  description: 'Production RAG AI Document Search Chatbot using Next.js, FastAPI, PostgreSQL, Pinecone, and GPT-4.',
+  title: 'AI-Document Search',
+  description: 'AI-Document Search app using Next.js and FastAPI for document-based chat and search.',
 };
 
 export default function RootLayout({
