@@ -16,7 +16,8 @@ export default function Dashboard({ user, documents, onOpenChat }: DashboardProp
   useEffect(() => {
     const fetchSummary = async () => {
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/dashboard/summary`);
+        const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
+        const res = await fetch(`${baseUrl}/api/v1/dashboard/summary`);
         if (res.ok) {
           const data = await res.json();
           setSummary(data);
