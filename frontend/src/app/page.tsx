@@ -11,6 +11,8 @@ interface DocumentItem {
   filename: string;
 }
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 export default function Home() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [deletingFile, setDeletingFile] = useState<string | null>(null);
@@ -19,7 +21,7 @@ export default function Home() {
 
   const fetchDocuments = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/documents/list');
+      const res = await fetch(`${API_BASE_URL}/api/v1/documents/list`);
       if (res.ok) {
         const data = await res.json();
         setDocuments(data.documents || []);
@@ -33,7 +35,7 @@ export default function Home() {
     setDeletingFile(filename);
     try {
       const res = await fetch(
-        `http://localhost:8000/api/v1/documents/${encodeURIComponent(filename)}`,
+        `${API_BASE_URL}/api/v1/documents/${encodeURIComponent(filename)}`,
         { method: 'DELETE' }
       );
       if (res.ok) {

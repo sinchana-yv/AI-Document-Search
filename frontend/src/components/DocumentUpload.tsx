@@ -27,7 +27,7 @@ export default function DocumentUpload({ onDocumentUploaded }: DocumentUploadPro
     formData.append('file', file);
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/documents/upload', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/documents/upload`, {
         method: 'POST',
         body: formData,
       });
