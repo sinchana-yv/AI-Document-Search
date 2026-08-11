@@ -16,16 +16,12 @@ class VectorStoreService:
         self._load_from_disk()
 
     def _get_embedding_model(self):
-        """Lazy-load OpenAI embedding model on first use."""
+        """Lazy-load HuggingFace embedding model on first use."""
         if self._embedding_model is None:
-            logger.info("Loading OpenAI embedding model...")
-            from langchain_openai import OpenAIEmbeddings
-            from app.config import settings
-            if not settings.OPENAI_API_KEY:
-                raise ValueError("OPENAI_API_KEY environment variable is not set on Render. Please add it to your Render environment variables.")
-            self._embedding_model = OpenAIEmbeddings(
-                openai_api_key=settings.OPENAI_API_KEY,
-                model=settings.OPENAI_EMBEDDING_MODEL
+            logger.info("Loading HuggingFace embedding model (all-MiniLM-L6-v2)...")
+            from langchain_community.embeddings import HuggingFaceEmbeddings
+            self._embedding_model = HuggingFaceEmbeddings(
+                model_name="all-MiniLM-L6-v2"
             )
             logger.info("Embedding model loaded successfully.")
         return self._embedding_model

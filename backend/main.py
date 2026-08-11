@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI application
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    description="Production-ready RAG API built with FastAPI, PostgreSQL, Pinecone, and OpenAI GPT-4o",
+    description="Production-ready RAG API built with FastAPI, PostgreSQL, Pinecone, and Local LLMs",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
