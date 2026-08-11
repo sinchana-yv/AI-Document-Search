@@ -18,10 +18,10 @@ class VectorStoreService:
     def _get_embedding_model(self):
         """Lazy-load HuggingFace embedding model on first use."""
         if self._embedding_model is None:
-            logger.info("Loading HuggingFace embedding model (all-MiniLM-L6-v2)...")
-            from langchain_community.embeddings import HuggingFaceEmbeddings
-            self._embedding_model = HuggingFaceEmbeddings(
-                model_name="all-MiniLM-L6-v2"
+            logger.info("Loading FastEmbed embedding model (BAAI/bge-small-en-v1.5) for fast CPU inference...")
+            from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
+            self._embedding_model = FastEmbedEmbeddings(
+                model_name="BAAI/bge-small-en-v1.5"
             )
             logger.info("Embedding model loaded successfully.")
         return self._embedding_model
